@@ -104,16 +104,24 @@ async function pdfText(url: string): Promise<string> {
   });
 }
 async function ddpm() {
-  const browser = await chromium.launch({ headless: true, executablePath: process.env.DOONAM_CHROMIUM });
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: process.env.DOONAM_CHROMIUM,
+  });
   const context = await browser.newContext();
-  // Only public rendered pages. No cookies, accounts, copied credentials or API authentication.
-  await context.route("**/*", (route) =>
-    ["image", "media", "font"].includes(route.request().resourceType())
-      ? route.abort()
-      : route.continue(),
-  );
+  context.on("requestfailed", (r) => {
+    if (["xhr", "fetch", "script"].includes(r.resourceType()))
+      console.warn(
+        "DDPM network",
+        new URL(r.url()).origin + new URL(r.url()).pathname,
+        r.failure()?.errorText,
+      );
+  });
+  // Use a normal isolated browser context. Do not block image resources:
+  // legacy minisites depend on their completion before rendering article content.
+  // Never copy credentials or disable TLS/mixed-content protections.
   const page = await context.newPage();
-  page.setDefaultTimeout(25000);
+  page.setDefaultTimeout(60000);
   try {
     const entries: DdpmEntry[] = [];
     for (const [path, kind, agency] of [
@@ -150,14 +158,21 @@ async function ddpm() {
         });
       }
     }
-    entries.sort((a,b)=>Number(b.url.includes("ndwc."))-Number(a.url.includes("ndwc.")));
+    entries.sort(
+      (a, b) =>
+        Number(b.url.includes("ndwc.")) - Number(a.url.includes("ndwc.")),
+    );
+    const detailContexts = new Map(await Promise.all([...new Set(entries.map(e=>new URL(e.url).origin))].map(async origin=>[origin,await browser.newContext()] as const)));
+    const deadline=Date.now()+7*60000;
     const bulletins = [];
-    let detailFailures=0;
+    let detailFailures = 0;
     for (let start = 0; start < entries.length; start += 3) {
+      if(Date.now()>deadline){detailFailures+=entries.length-start;break;}
       const parts = await Promise.all(
         entries.slice(start, start + 3).map(async (row) => {
-          const detail = await context.newPage();
-          detail.setDefaultTimeout(25000);
+          const detailContext = detailContexts.get(new URL(row.url).origin)!;
+          const detail = await detailContext.newPage();
+          detail.setDefaultTimeout(60000);
           try {
             await detail.goto(row.url, {
               waitUntil: "domcontentloaded",
@@ -199,22 +214,39 @@ async function ddpm() {
             if (/รายงานแจ้งข่าวแจ้งเตือน|รายงานสถานการณ์/.test(row.title))
               row.kind = "situation";
             return parseDdpmEntry(row, stamp());
-          } catch(error) {
-            console.warn("DDPM headings",await detail.locator("h1,h2,h3").allTextContents());
-            detailFailures++;console.warn("DDPM article unavailable",row.url,(error as Error).message.split("\n")[0]);return null;
+          } catch (error) {
+            console.warn(
+              "DDPM headings",
+              await detail.locator("h1,h2,h3").allTextContents(),
+            );
+            detailFailures++;
+            console.warn(
+              "DDPM article unavailable",
+              row.url,
+              (error as Error).message.split("\n")[0],
+            );
+            return null;
           } finally {
             await detail.close();
           }
         }),
       );
-      console.log("DDPM inspected",start+parts.length,"of",entries.length);
+      console.log("DDPM inspected", start + parts.length, "of", entries.length);
       bulletins.push(
         ...parts.filter((b): b is NonNullable<typeof b> => b !== null),
       );
     }
-    if(detailFailures && !bulletins.length)throw new Error("DOM");
+    if (detailFailures && !bulletins.length) throw new Error("DOM");
     return BatchSchema.parse({
-      coverage:{partial:detailFailures>0,returned:entries.length-detailFailures,total:entries.length,windowStart:new Date(Date.now()-7*86400000).toISOString(),windowEnd:stamp(),timezoneAssumption:"Asia/Bangkok; published dates may have day precision"},
+      coverage: {
+        partial: detailFailures > 0,
+        returned: entries.length - detailFailures,
+        total: entries.length,
+        windowStart: new Date(Date.now() - 7 * 86400000).toISOString(),
+        windowEnd: stamp(),
+        timezoneAssumption:
+          "Asia/Bangkok; published dates may have day precision",
+      },
       sourceId: "ddpm",
       stations: [],
       observations: [],
@@ -292,7 +324,7 @@ for (const [id, collect] of [
       : id === "ddpm"
         ? "DOM"
         : "NETWORK";
-    console.error(id, code, raw.slice(0,500));
+    console.error(id, code, raw.slice(0, 500));
     try {
       await send(id, undefined, code);
     } catch {

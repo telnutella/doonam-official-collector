@@ -1,8 +1,15 @@
-import {createHash} from "node:crypto";
-import {XMLParser, XMLValidator} from "fast-xml-parser";
-import {z} from "zod";
-import {AlertSchema,BatchSchema,provinceCodes,type Alert,type Batch} from "./model";
-const digest=(value:unknown)=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
+import { createHash } from "node:crypto";
+import { XMLParser, XMLValidator } from "fast-xml-parser";
+import { z } from "zod";
+import {
+  AlertSchema,
+  BatchSchema,
+  provinceCodes,
+  type Alert,
+  type Batch,
+} from "./model";
+const digest = (value: unknown) =>
+  createHash("sha256").update(JSON.stringify(value)).digest("hex");
 function xmlDocument(xml: string): Record<string, any> {
   if (Buffer.byteLength(xml) > 2_000_000 || /<!DOCTYPE|<!ENTITY/i.test(xml))
     throw new Error("Unsafe XML");

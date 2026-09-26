@@ -8607,14 +8607,21 @@ async function pdfText(url) {
   });
 }
 async function ddpm() {
-  const browser = await chromium.launch({ headless: true, executablePath: process.env.DOONAM_CHROMIUM });
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: process.env.DOONAM_CHROMIUM
+  });
   const context = await browser.newContext();
-  await context.route(
-    "**/*",
-    (route) => ["image", "media", "font"].includes(route.request().resourceType()) ? route.abort() : route.continue()
-  );
+  context.on("requestfailed", (r) => {
+    if (["xhr", "fetch", "script"].includes(r.resourceType()))
+      console.warn(
+        "DDPM network",
+        new URL(r.url()).origin + new URL(r.url()).pathname,
+        r.failure()?.errorText
+      );
+  });
   const page = await context.newPage();
-  page.setDefaultTimeout(25e3);
+  page.setDefaultTimeout(6e4);
   try {
     const entries = [];
     for (const [path, kind, agency] of [
@@ -8651,14 +8658,23 @@ async function ddpm() {
         });
       }
     }
-    entries.sort((a, b) => Number(b.url.includes("ndwc.")) - Number(a.url.includes("ndwc.")));
+    entries.sort(
+      (a, b) => Number(b.url.includes("ndwc.")) - Number(a.url.includes("ndwc."))
+    );
+    const detailContexts = new Map(await Promise.all([...new Set(entries.map((e) => new URL(e.url).origin))].map(async (origin) => [origin, await browser.newContext()])));
+    const deadline = Date.now() + 7 * 6e4;
     const bulletins = [];
     let detailFailures = 0;
     for (let start = 0; start < entries.length; start += 3) {
+      if (Date.now() > deadline) {
+        detailFailures += entries.length - start;
+        break;
+      }
       const parts = await Promise.all(
         entries.slice(start, start + 3).map(async (row) => {
-          const detail = await context.newPage();
-          detail.setDefaultTimeout(25e3);
+          const detailContext = detailContexts.get(new URL(row.url).origin);
+          const detail = await detailContext.newPage();
+          detail.setDefaultTimeout(6e4);
           try {
             await detail.goto(row.url, {
               waitUntil: "domcontentloaded",
@@ -8683,9 +8699,16 @@ async function ddpm() {
               row.kind = "situation";
             return parseDdpmEntry(row, stamp());
           } catch (error) {
-            console.warn("DDPM headings", await detail.locator("h1,h2,h3").allTextContents());
+            console.warn(
+              "DDPM headings",
+              await detail.locator("h1,h2,h3").allTextContents()
+            );
             detailFailures++;
-            console.warn("DDPM article unavailable", row.url, error.message.split("\n")[0]);
+            console.warn(
+              "DDPM article unavailable",
+              row.url,
+              error.message.split("\n")[0]
+            );
             return null;
           } finally {
             await detail.close();
@@ -8699,7 +8722,14 @@ async function ddpm() {
     }
     if (detailFailures && !bulletins.length) throw new Error("DOM");
     return BatchSchema.parse({
-      coverage: { partial: detailFailures > 0, returned: entries.length - detailFailures, total: entries.length, windowStart: new Date(Date.now() - 7 * 864e5).toISOString(), windowEnd: stamp(), timezoneAssumption: "Asia/Bangkok; published dates may have day precision" },
+      coverage: {
+        partial: detailFailures > 0,
+        returned: entries.length - detailFailures,
+        total: entries.length,
+        windowStart: new Date(Date.now() - 7 * 864e5).toISOString(),
+        windowEnd: stamp(),
+        timezoneAssumption: "Asia/Bangkok; published dates may have day precision"
+      },
       sourceId: "ddpm",
       stations: [],
       observations: [],
