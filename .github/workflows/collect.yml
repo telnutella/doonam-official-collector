@@ -34,3 +34,19 @@ jobs:
           NODE_EXTRA_CA_CERTS: certs/globalsign-intermediate.crt
           DOONAM_INGEST_URL: ${{ vars.DOONAM_INGEST_URL }}
           DOONAM_INGEST_SECRET: ${{ secrets.DOONAM_INGEST_SECRET }}
+  roads:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build:roads
+      - run: npm run collect:roads
+        env:
+          DOONAM_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+          DOONAM_INGEST_URL: ${{ vars.DOONAM_INGEST_URL }}
+          DOONAM_INGEST_SECRET: ${{ secrets.DOONAM_INGEST_SECRET }}

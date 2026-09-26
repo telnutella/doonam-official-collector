@@ -30,6 +30,8 @@ export const StationSchema = z.object({
   districtName: z.string().min(1).max(150).nullable().optional(),
   subdistrictName: z.string().min(1).max(150).nullable().optional(),
   agencyName: z.string().max(300).optional(),
+  basinId: z.string().max(50).nullable().optional(),
+  basinName: z.string().max(150).nullable().optional(),
 });
 export const ObservationSchema = z
   .object({
@@ -46,6 +48,14 @@ export const ObservationSchema = z
     quality: z.enum(["valid", "unverified", "missing", "invalid"]),
     sourceQuality: z.string().nullable(),
     expectedIntervalMinutes: z.number().positive(),
+    bankLevelMsl: z.number().finite().optional(),
+    change: z
+      .object({
+        centimeters: z.number().finite(),
+        minutes: z.number().positive(),
+        fromAt: iso,
+      })
+      .optional(),
   })
   .superRefine((o, ctx) => {
     if (
@@ -88,6 +98,10 @@ export const AlertSchema = z
       ctx.addIssue({ code: "custom", message: "Invalid validity interval" });
   });
 export const ReportSchema = z.object({
+  road: z
+    .object({ name: z.string().min(1).max(140), kind: z.enum(["road", "soi"]) })
+    .nullable()
+    .optional(),
   id,
   sourceId: id,
   revision: id,
@@ -138,12 +152,36 @@ export const BulletinSchema = z.object({
   attachmentUrls: z.array(https).max(20),
 });
 export type Bulletin = z.infer<typeof BulletinSchema>;
+export const IncidentSchema = z.object({
+  id,
+  sourceId: z.literal("itic"),
+  sourceIncidentId: id,
+  revision: id,
+  title: z.string().min(1).max(1000),
+  body: z.string().max(20000),
+  kind: z.enum(["flood", "rain", "roadClosure"]),
+  provinceCode: province.nullable(),
+  districtName: z.string().max(150).nullable(),
+  subdistrictName: z.string().max(150).nullable(),
+  latitude: z.number().min(-90).max(90).nullable(),
+  longitude: z.number().min(-180).max(180).nullable(),
+  startedAt: iso,
+  publishedAt: iso,
+  endsAt: iso,
+  fetchedAt: iso,
+  sourceUrl: https,
+  imageCount: z.number().int().min(0).max(100),
+  sourceStatus: z.string().max(20),
+  attribution: z.string().max(200),
+});
+export type Incident = z.infer<typeof IncidentSchema>;
 export const BatchSchema = z.object({
   sourceId: id,
   stations: z.array(StationSchema),
   observations: z.array(ObservationSchema),
   alerts: z.array(AlertSchema),
   reports: z.array(ReportSchema).optional(),
+  incidents: z.array(IncidentSchema).max(5000).optional(),
   bulletins: z.array(BulletinSchema).max(300).optional(),
   coverage: z
     .object({
