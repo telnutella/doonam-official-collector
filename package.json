@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "collect": "node collect.mjs",
-    "build": "esbuild entry.ts --bundle --platform=node --format=esm --external:playwright --outfile=collect.mjs"
+    "build": "esbuild entry.ts --bundle --platform=node --format=esm --external:playwright --outfile=collect.mjs",
+    "build:reservoirs": "esbuild reservoirs.ts --bundle --platform=node --format=esm --outfile=reservoirs.mjs",
+    "collect:reservoirs": "node reservoirs.mjs"
   },
   "dependencies": {
     "playwright": "1.58.2"
