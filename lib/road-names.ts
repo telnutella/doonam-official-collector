@@ -47,7 +47,7 @@ export function extractRoadName(
 }
 export function scrubPublicText(raw: string) {
   return normalizeText(
-    raw
+    normalizeText(raw)
       .replace(/<[^>]*>/g, " ")
       .replace(/รายงานโดย[\s\S]*$/u, "")
       .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[ปกปิดอีเมล]")
