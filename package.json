@@ -1,1 +1,17 @@
-{"name":"doonam-public-collector","private":true,"type":"module","scripts":{"collect":"node collect.mjs"},"dependencies":{"playwright":"1.58.2"}}
+{
+  "name": "doonam-public-collector",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "collect": "node collect.mjs",
+    "build": "esbuild entry.ts --bundle --platform=node --format=esm --external:playwright --outfile=collect.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.58.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "fast-xml-parser": "5.11.1",
+    "zod": "3.25.76"
+  }
+}

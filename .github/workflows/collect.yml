@@ -24,10 +24,12 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: python3 -m pip install pypdf==6.10.0
       - run: npm run collect
         env:
+          DOONAM_DDPM_ENABLED: ${{ vars.DOONAM_DDPM_ENABLED || '0' }}
           DOONAM_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
           NODE_EXTRA_CA_CERTS: certs/globalsign-intermediate.crt
           DOONAM_INGEST_URL: ${{ vars.DOONAM_INGEST_URL }}

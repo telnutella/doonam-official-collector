@@ -8443,7 +8443,7 @@ var short = [
 ];
 function thaiDate(text) {
   text = text.replace(/[๐-๙]/g, (c) => String(c.charCodeAt(0) - 3664));
-  const names = [...months, ...short].join("|");
+  const names = [...months, ...short].map((s) => s.replaceAll(".", "\\.")).join("|");
   const m = text.match(
     new RegExp(
       `(\\d{1,2})\\s*(${names})\\s*(\\d{2,4})(?:\\s*(?:\u0E40\u0E27\u0E25\u0E32\\s*:?\\s*)?(\\d{1,2})[:.](\\d{2})\\s*\u0E19)?`
@@ -8466,7 +8466,7 @@ function waterHazards(text) {
   const out = [];
   if (/น้ำท่วม|อุทกภัย|น้ำล้นตลิ่ง/.test(text)) out.push("flood");
   if (/ฝนตกหนัก|ฝนหนัก/.test(text)) out.push("heavyRain");
-  if (/น้ำป่า|น้ำหลาก/.test(text)) out.push("flashFlood");
+  if (/น้ำป่า|น้ำหลาก|น้ำท่วมฉับพลัน/.test(text)) out.push("flashFlood");
   if (/ดินถล่ม|ดินโคลนถล่ม/.test(text)) out.push("landslide");
   return out;
 }
@@ -8485,10 +8485,13 @@ function parseDdpmEntry(row, fetchedAt) {
     return null;
   const hazards = waterHazards(row.title + " " + (row.detailText ?? ""));
   if (!hazards.length) return null;
-  const area = provinces.filter(([_, name]) => row.title.includes(name)).map(([code]) => code);
+  const area = provinces.filter(
+    ([code, name]) => row.title.includes(name) || code === "10" && /กทม\.|กรุงเทพฯ/.test(row.title)
+  ).map(([code]) => code);
   let reportAt = null;
   try {
-    reportAt = thaiDate(row.title).iso;
+    const parsed = thaiDate(row.title);
+    if (parsed.precision === "minute") reportAt = parsed.iso;
   } catch {
   }
   const publicFields = {
@@ -8616,7 +8619,7 @@ async function ddpm() {
     if (["xhr", "fetch", "script"].includes(r.resourceType()))
       console.warn(
         "DDPM network",
-        new URL(r.url()).origin + new URL(r.url()).pathname,
+        new URL(r.url()).origin,
         r.failure()?.errorText
       );
   });
@@ -8628,10 +8631,15 @@ async function ddpm() {
       ["disaster_news", "situation", "\u0E1B\u0E20. \xB7 \u0E28\u0E39\u0E19\u0E22\u0E4C\u0E2D\u0E33\u0E19\u0E27\u0E22\u0E01\u0E32\u0E23\u0E1A\u0E23\u0E23\u0E40\u0E17\u0E32\u0E2A\u0E32\u0E18\u0E32\u0E23\u0E13\u0E20\u0E31\u0E22"],
       ["disaster_alert_report", "warning", "\u0E1B\u0E20. \xB7 \u0E28\u0E39\u0E19\u0E22\u0E4C\u0E40\u0E15\u0E37\u0E2D\u0E19\u0E20\u0E31\u0E22\u0E1E\u0E34\u0E1A\u0E31\u0E15\u0E34\u0E41\u0E2B\u0E48\u0E07\u0E0A\u0E32\u0E15\u0E34"]
     ]) {
-      await page.goto("https://www.disaster.go.th/contents/" + path, {
-        waitUntil: "domcontentloaded",
-        timeout: 4e4
-      });
+      const listResponse = await page.goto(
+        "https://www.disaster.go.th/contents/" + path,
+        {
+          waitUntil: "domcontentloaded",
+          timeout: 4e4
+        }
+      );
+      if ([403, 429].includes(listResponse?.status() ?? 0))
+        throw new Error("ACCESS");
       const cards = page.locator('main a[href*="/cms/"]');
       await cards.first().waitFor();
       const rows = await cards.evaluateAll(
@@ -8661,7 +8669,13 @@ async function ddpm() {
     entries.sort(
       (a, b) => Number(b.url.includes("ndwc.")) - Number(a.url.includes("ndwc."))
     );
-    const detailContexts = new Map(await Promise.all([...new Set(entries.map((e) => new URL(e.url).origin))].map(async (origin) => [origin, await browser.newContext()])));
+    const detailContexts = new Map(
+      await Promise.all(
+        [...new Set(entries.map((e) => new URL(e.url).origin))].map(
+          async (origin) => [origin, await browser.newContext()]
+        )
+      )
+    );
     const deadline = Date.now() + 7 * 6e4;
     const bulletins = [];
     let detailFailures = 0;
@@ -8788,13 +8802,17 @@ for (const [id2, collect] of [
   ["ddpm", ddpm]
 ]) {
   try {
+    if (id2 === "ddpm" && process.env.DOONAM_DDPM_ENABLED === "0") {
+      await send(id2, void 0, "ACCESS");
+      continue;
+    }
     const batch = await collect();
     await send(id2, batch);
   } catch (e) {
     failed = true;
     const raw = e.message;
-    const code = ["TLS", "HTTP", "RSS", "CAP", "DATE"].includes(raw) ? raw : id2 === "ddpm" ? "DOM" : "NETWORK";
-    console.error(id2, code, raw.slice(0, 500));
+    const code = ["TLS", "HTTP", "RSS", "CAP", "DATE", "ACCESS"].includes(raw) ? raw : id2 === "ddpm" ? "DOM" : "NETWORK";
+    console.error(id2, code);
     try {
       await send(id2, void 0, code);
     } catch {

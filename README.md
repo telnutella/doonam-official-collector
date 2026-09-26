@@ -20,3 +20,9 @@ The intermediate certificate is public, retrieved via HTTPS from https://secure.
 Failures report a stage (TLS/HTTP/RSS/CAP/DOM/DATE/NETWORK) and do not replace the last successful source payload. No silent conversion to zero bulletins.
 
 Source links: https://www.tmd.go.th/api/xml/CAP and https://www.disaster.go.th/home.
+
+## Current DDPM availability
+
+Verified 2026-09-26: public rendered articles can be read locally, but GitHub-hosted runners receive a Cloudflare human-verification challenge. Scheduled DDPM collection is disabled (`DOONAM_DDPM_ENABLED=0`) until an authorized supported channel is available. TMD collection continues. The receiver reports DDPM ACCESS/unavailable and preserves any previously collected records. Do not bypass the challenge or copy browser/API credentials.
+
+Set `DOONAM_DDPM_ENABLED=1` only after verifying that the normal public browser flow works on the selected runner.

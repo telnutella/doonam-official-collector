@@ -34,7 +34,9 @@ export function thaiDate(text: string): {
   precision: "day" | "minute";
 } {
   text = text.replace(/[๐-๙]/g, (c) => String(c.charCodeAt(0) - 3664));
-  const names = [...months, ...short].join("|");
+  const names = [...months, ...short]
+    .map((s) => s.replaceAll(".", "\\."))
+    .join("|");
   const m = text.match(
     new RegExp(
       `(\\d{1,2})\\s*(${names})\\s*(\\d{2,4})(?:\\s*(?:เวลา\\s*:?\\s*)?(\\d{1,2})[:.](\\d{2})\\s*น)?`,
@@ -65,7 +67,7 @@ export function waterHazards(text: string): Bulletin["hazards"] {
   const out: Bulletin["hazards"] = [];
   if (/น้ำท่วม|อุทกภัย|น้ำล้นตลิ่ง/.test(text)) out.push("flood");
   if (/ฝนตกหนัก|ฝนหนัก/.test(text)) out.push("heavyRain");
-  if (/น้ำป่า|น้ำหลาก/.test(text)) out.push("flashFlood");
+  if (/น้ำป่า|น้ำหลาก|น้ำท่วมฉับพลัน/.test(text)) out.push("flashFlood");
   if (/ดินถล่ม|ดินโคลนถล่ม/.test(text)) out.push("landslide");
   return out;
 }
@@ -110,11 +112,16 @@ export function parseDdpmEntry(
   // Assign only explicit province names in the headline. Article body may mention
   // background areas, office addresses or unrelated incidents. Keep these general.
   const area = provinces
-    .filter(([_, name]) => row.title.includes(name))
+    .filter(
+      ([code, name]) =>
+        row.title.includes(name) ||
+        (code === "10" && /กทม\.|กรุงเทพฯ/.test(row.title)),
+    )
     .map(([code]) => code);
   let reportAt: string | null = null;
   try {
-    reportAt = thaiDate(row.title).iso;
+    const parsed = thaiDate(row.title);
+    if (parsed.precision === "minute") reportAt = parsed.iso;
   } catch {}
   const publicFields = {
     title: row.title,

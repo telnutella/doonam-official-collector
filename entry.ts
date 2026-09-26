@@ -113,7 +113,7 @@ async function ddpm() {
     if (["xhr", "fetch", "script"].includes(r.resourceType()))
       console.warn(
         "DDPM network",
-        new URL(r.url()).origin + new URL(r.url()).pathname,
+        new URL(r.url()).origin,
         r.failure()?.errorText,
       );
   });
@@ -128,10 +128,15 @@ async function ddpm() {
       ["disaster_news", "situation", "ปภ. · ศูนย์อำนวยการบรรเทาสาธารณภัย"],
       ["disaster_alert_report", "warning", "ปภ. · ศูนย์เตือนภัยพิบัติแห่งชาติ"],
     ] as const) {
-      await page.goto("https://www.disaster.go.th/contents/" + path, {
-        waitUntil: "domcontentloaded",
-        timeout: 40000,
-      });
+      const listResponse = await page.goto(
+        "https://www.disaster.go.th/contents/" + path,
+        {
+          waitUntil: "domcontentloaded",
+          timeout: 40000,
+        },
+      );
+      if ([403, 429].includes(listResponse?.status() ?? 0))
+        throw new Error("ACCESS");
       const cards = page.locator('main a[href*="/cms/"]');
       await cards.first().waitFor();
       const rows = await cards.evaluateAll((anchors) =>
@@ -162,12 +167,21 @@ async function ddpm() {
       (a, b) =>
         Number(b.url.includes("ndwc.")) - Number(a.url.includes("ndwc.")),
     );
-    const detailContexts = new Map(await Promise.all([...new Set(entries.map(e=>new URL(e.url).origin))].map(async origin=>[origin,await browser.newContext()] as const)));
-    const deadline=Date.now()+7*60000;
+    const detailContexts = new Map(
+      await Promise.all(
+        [...new Set(entries.map((e) => new URL(e.url).origin))].map(
+          async (origin) => [origin, await browser.newContext()] as const,
+        ),
+      ),
+    );
+    const deadline = Date.now() + 7 * 60000;
     const bulletins = [];
     let detailFailures = 0;
     for (let start = 0; start < entries.length; start += 3) {
-      if(Date.now()>deadline){detailFailures+=entries.length-start;break;}
+      if (Date.now() > deadline) {
+        detailFailures += entries.length - start;
+        break;
+      }
       const parts = await Promise.all(
         entries.slice(start, start + 3).map(async (row) => {
           const detailContext = detailContexts.get(new URL(row.url).origin)!;
@@ -314,17 +328,21 @@ for (const [id, collect] of [
   ["ddpm", ddpm],
 ] as const) {
   try {
+    if (id === "ddpm" && process.env.DOONAM_DDPM_ENABLED === "0") {
+      await send(id, undefined, "ACCESS");
+      continue;
+    }
     const batch = await collect();
     await send(id, batch);
   } catch (e) {
     failed = true;
     const raw = (e as Error).message;
-    const code = ["TLS", "HTTP", "RSS", "CAP", "DATE"].includes(raw)
+    const code = ["TLS", "HTTP", "RSS", "CAP", "DATE", "ACCESS"].includes(raw)
       ? raw
       : id === "ddpm"
         ? "DOM"
         : "NETWORK";
-    console.error(id, code, raw.slice(0, 500));
+    console.error(id, code);
     try {
       await send(id, undefined, code);
     } catch {
