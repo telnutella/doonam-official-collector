@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build:rain": "esbuild rain.ts --bundle --platform=node --format=esm --outfile=rain.mjs",
+    "collect:rain": "node rain.mjs",
     "collect": "node collect.mjs",
     "build": "esbuild entry.ts --bundle --platform=node --format=esm --external:playwright --outfile=collect.mjs",
     "build:reservoirs": "esbuild reservoirs.ts --bundle --platform=node --format=esm --outfile=reservoirs.mjs",

@@ -5,9 +5,86 @@ var __export = (target, all) => {
 };
 
 // entry.ts
-import { createHmac, randomUUID } from "node:crypto";
+import { randomUUID as randomUUID2 } from "node:crypto";
 
-// lib/source-errors.ts
+// ../lib/bounded-fetch.ts
+async function boundedFetch(url, init = {}, options = {}) {
+  const fetcher = options.fetcher ?? fetch;
+  const sleep = options.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+  for (let attempt = 0; ; attempt++) {
+    let wait = 500 * 2 ** attempt;
+    try {
+      const response = await fetcher(url, {
+        ...init,
+        redirect: "manual",
+        signal: init.signal ? AbortSignal.any([
+          init.signal,
+          AbortSignal.timeout(options.timeoutMs ?? 1e4)
+        ]) : AbortSignal.timeout(options.timeoutMs ?? 1e4)
+      });
+      if (![408, 429, 500, 502, 503, 504].includes(response.status) || attempt >= (options.attempts ?? 3) - 1)
+        return response;
+      const retry = response.headers.get("retry-after");
+      if (retry) {
+        const delay = /^\d+$/.test(retry) ? Number(retry) * 1e3 : Date.parse(retry) - Date.now();
+        if (Number.isFinite(delay) && delay > 5e3) return response;
+        if (Number.isFinite(delay)) wait = Math.max(wait, delay);
+      }
+      await response.body?.cancel();
+    } catch (error) {
+      const text = String(error) + String(error?.cause?.code ?? "");
+      if (init.signal?.aborted || /CERT|TLS|SSL|LEAF_SIGNATURE/i.test(text) || attempt >= (options.attempts ?? 3) - 1)
+        throw error;
+    }
+    await sleep(wait);
+  }
+}
+
+// client.ts
+import { createHmac, randomUUID } from "node:crypto";
+var DeliveryError = class extends Error {
+};
+async function signedPost(path, item, timeoutMs = 3e4) {
+  const raw = process.env.DOONAM_INGEST_URL, secret = process.env.DOONAM_INGEST_SECRET;
+  if (!raw || !secret)
+    throw new DeliveryError("Collector configuration missing");
+  const url = new URL(raw);
+  const localVerification = process.env.DOONAM_LOCAL_VERIFY === "1" && url.origin === "http://localhost:5173";
+  if (url.protocol !== "https:" && !localVerification)
+    throw new DeliveryError("HTTPS required");
+  if (url.pathname !== "/api/internal/ingest" || url.username || url.password || url.search || url.hash)
+    throw new DeliveryError("Invalid collector URL");
+  url.pathname = `/api/internal/${path}`;
+  const body = JSON.stringify(item);
+  try {
+    const response = await boundedFetch(
+      url.href,
+      { method: "POST", body },
+      {
+        timeoutMs,
+        fetcher: async (input, init) => {
+          const timestamp = String(Date.now()), nonce = randomUUID();
+          return fetch(input, {
+            ...init,
+            headers: {
+              "Content-Type": "application/json",
+              "x-doonam-time": timestamp,
+              "x-doonam-nonce": nonce,
+              "x-doonam-signature": createHmac("sha256", secret).update(`${timestamp}.${nonce}.${body}`).digest("hex")
+            }
+          });
+        }
+      }
+    );
+    if (!response.ok)
+      throw new DeliveryError(`Delivery HTTP ${response.status}`);
+    return await response.json();
+  } catch (error) {
+    throw error instanceof DeliveryError ? error : new DeliveryError("Delivery unavailable");
+  }
+}
+
+// ../lib/source-errors.ts
 function transportStage(error) {
   const parts = [];
   let current = error;
@@ -19,10 +96,10 @@ function transportStage(error) {
   return /CERT|TLS|SSL|LEAF_SIGNATURE/i.test(parts.join(" ")) ? "TLS" : "NETWORK";
 }
 
-// lib/cap.ts
+// ../lib/cap.ts
 import { createHash } from "node:crypto";
 
-// node_modules/fast-xml-parser/src/util.js
+// ../node_modules/fast-xml-parser/src/util.js
 var nameStartChar = ":A-Za-z_\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD";
 var nameChar = nameStartChar + "\\-.\\d\\u00B7\\u0300-\\u036F\\u203F-\\u2040";
 var nameRegexp = "[" + nameStartChar + "][" + nameChar + "]*";
@@ -63,7 +140,7 @@ var DANGEROUS_PROPERTY_NAMES = [
 ];
 var criticalProperties = ["__proto__", "constructor", "prototype"];
 
-// node_modules/fast-xml-parser/src/validator.js
+// ../node_modules/fast-xml-parser/src/validator.js
 var defaultOptions = {
   allowBooleanAttributes: false,
   //A tag can have attributes without any value
@@ -415,7 +492,7 @@ function getPositionFromMatch(match) {
   return match.startIndex + match[1].length;
 }
 
-// node_modules/@nodable/entities/src/entities.js
+// ../node_modules/@nodable/entities/src/entities.js
 var CURRENCY = {
   cent: "\xA2",
   pound: "\xA3",
@@ -463,7 +540,7 @@ var COMMON_HTML = {
   frac34: "\xBE"
 };
 
-// node_modules/@nodable/entities/src/EntityDecoder.js
+// ../node_modules/@nodable/entities/src/EntityDecoder.js
 var ENTITY_ACTION = Object.freeze({
   /** Resolve and expand the entity normally. */
   ALLOW: "allow",
@@ -907,7 +984,7 @@ var EntityDecoder = class {
   }
 };
 
-// node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js
+// ../node_modules/fast-xml-parser/src/xmlparser/OptionsBuilder.js
 var defaultOnDangerousProperty = (name) => {
   if (DANGEROUS_PROPERTY_NAMES.includes(name)) {
     return "__" + name;
@@ -1042,7 +1119,7 @@ var buildOptions = function(options) {
   return built;
 };
 
-// node_modules/fast-xml-parser/src/xmlparser/xmlNode.js
+// ../node_modules/fast-xml-parser/src/xmlparser/xmlNode.js
 var METADATA_SYMBOL;
 if (typeof Symbol !== "function") {
   METADATA_SYMBOL = "@@xmlMetadata";
@@ -1085,7 +1162,7 @@ var XmlNode = class {
   }
 };
 
-// node_modules/xml-naming/src/index.js
+// ../node_modules/xml-naming/src/index.js
 var nameStartChar10 = ":A-Za-z_\xC0-\xD6\xD8-\xF6\xF8-\u02FF\u0370-\u037D\u037F-\u0486\u0488-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD";
 var nameChar10 = nameStartChar10 + "\\-\\.\\d\xB7\u0300-\u036F\u203F-\u2040";
 var nameStartChar11 = ":A-Za-z_\xC0-\u02FF\u0370-\u037D\u037F-\u0486\u0488-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\u{10000}-\u{EFFFF}";
@@ -1113,7 +1190,7 @@ var getRegexes = (xmlVersion = "1.0", asciiOnly = false) => {
 };
 var qName = (str, { xmlVersion = "1.0", asciiOnly = false } = {}) => getRegexes(xmlVersion, asciiOnly).qName.test(str);
 
-// node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js
+// ../node_modules/fast-xml-parser/src/xmlparser/DocTypeReader.js
 var DocTypeReader = class {
   constructor(options, xmlVersion) {
     this.suppressValidationErr = !options;
@@ -1404,7 +1481,7 @@ function validateEntityName2(name, xmlVersion) {
     throw new Error(`Invalid entity name ${name}`);
 }
 
-// node_modules/anynum/digitTable.js
+// ../node_modules/anynum/digitTable.js
 var SCRIPT_ZEROS = [
   // Basic Latin (ASCII) — included for completeness / pass-through
   48,
@@ -1554,7 +1631,7 @@ for (const zero of SCRIPT_ZEROS) {
   }
 }
 
-// node_modules/anynum/anynum.js
+// ../node_modules/anynum/anynum.js
 var CHAR_0 = 48;
 var CHAR_9 = 57;
 var CHAR_MINUS = 45;
@@ -1632,7 +1709,7 @@ function anynum(str) {
 }
 var anynum_default = anynum;
 
-// node_modules/strnum/strnum.js
+// ../node_modules/strnum/strnum.js
 var hexRegex = /^[-+]?0x[a-fA-F0-9]+$/;
 var binRegex = /^0b[01]+$/;
 var octRegex = /^0o[0-7]+$/;
@@ -1770,7 +1847,7 @@ function handleInfinity(str, num, options) {
   }
 }
 
-// node_modules/fast-xml-parser/src/ignoreAttributes.js
+// ../node_modules/fast-xml-parser/src/ignoreAttributes.js
 function getIgnoreAttributesFn(ignoreAttributes) {
   if (typeof ignoreAttributes === "function") {
     return ignoreAttributes;
@@ -1790,7 +1867,7 @@ function getIgnoreAttributesFn(ignoreAttributes) {
   return () => false;
 }
 
-// node_modules/path-expression-matcher/src/Expression.js
+// ../node_modules/path-expression-matcher/src/Expression.js
 var Expression = class {
   /**
    * Create a new Expression
@@ -1953,7 +2030,7 @@ var Expression = class {
   }
 };
 
-// node_modules/path-expression-matcher/src/ExpressionSet.js
+// ../node_modules/path-expression-matcher/src/ExpressionSet.js
 var ExpressionSet = class {
   constructor() {
     this._byDepthAndTag = /* @__PURE__ */ new Map();
@@ -2122,7 +2199,7 @@ var ExpressionSet = class {
   }
 };
 
-// node_modules/path-expression-matcher/src/Matcher.js
+// ../node_modules/path-expression-matcher/src/Matcher.js
 var MatcherView = class {
   /**
    * @param {Matcher} matcher - The parent Matcher instance to read from.
@@ -2639,7 +2716,7 @@ var Matcher = class {
   }
 };
 
-// node_modules/is-unsafe/src/contexts/html.js
+// ../node_modules/is-unsafe/src/contexts/html.js
 var HTML_PATTERNS = [
   {
     id: "html-script-open",
@@ -2732,7 +2809,7 @@ var HTML_PATTERNS = [
 ];
 var html_default = HTML_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/xml.js
+// ../node_modules/is-unsafe/src/contexts/xml.js
 var XML_PATTERNS = [
   {
     id: "xml-cdata-injection",
@@ -2800,7 +2877,7 @@ var XML_PATTERNS = [
 ];
 var xml_default = XML_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/svg.js
+// ../node_modules/is-unsafe/src/contexts/svg.js
 var SVG_PATTERNS = [
   {
     id: "svg-script-element",
@@ -2872,7 +2949,7 @@ var SVG_PATTERNS = [
 ];
 var svg_default = SVG_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/sql.js
+// ../node_modules/is-unsafe/src/contexts/sql.js
 var SQL_PATTERNS = [
   {
     id: "sql-block-comment-open",
@@ -2954,7 +3031,7 @@ var SQL_PATTERNS = [
 ];
 var sql_default = SQL_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/shell.js
+// ../node_modules/is-unsafe/src/contexts/shell.js
 var SHELL_PATTERNS = [
   {
     id: "shell-path-traversal-unix",
@@ -3052,7 +3129,7 @@ var SHELL_PATTERNS = [
 ];
 var shell_default = SHELL_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/redos.js
+// ../node_modules/is-unsafe/src/contexts/redos.js
 var REDOS_PATTERNS = [
   {
     id: "redos-nested-quantifier-plus",
@@ -3101,7 +3178,7 @@ var REDOS_PATTERNS = [
 ];
 var redos_default = REDOS_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/nosql.js
+// ../node_modules/is-unsafe/src/contexts/nosql.js
 var sep = `["'\\s]*:`;
 var NOSQL_PATTERNS = [
   // ─── MongoDB $ operator injection ────────────────────────────────────────
@@ -3191,7 +3268,7 @@ var NOSQL_PATTERNS = [
 ];
 var nosql_default = NOSQL_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/log.js
+// ../node_modules/is-unsafe/src/contexts/log.js
 var LOG_PATTERNS = [
   // ─── CRLF / newline injection ─────────────────────────────────────────────
   {
@@ -3265,7 +3342,7 @@ var LOG_PATTERNS = [
 ];
 var log_default = LOG_PATTERNS;
 
-// node_modules/is-unsafe/src/contexts/sql-strict.js
+// ../node_modules/is-unsafe/src/contexts/sql-strict.js
 var SQL_STRICT_EXTRA = [
   {
     id: "sql-line-comment",
@@ -3286,7 +3363,7 @@ var SQL_STRICT_EXTRA = [
 var SQL_STRICT_PATTERNS = [...sql_default, ...SQL_STRICT_EXTRA];
 var sql_strict_default = SQL_STRICT_PATTERNS;
 
-// node_modules/is-unsafe/src/index.js
+// ../node_modules/is-unsafe/src/index.js
 html_default.label = "HTML";
 xml_default.label = "XML";
 svg_default.label = "SVG";
@@ -3360,7 +3437,7 @@ function isUnsafe(value, context) {
   return false;
 }
 
-// node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js
+// ../node_modules/fast-xml-parser/src/xmlparser/OrderedObjParser.js
 function extractRawAttributes(prefixedAttrs, options) {
   if (!prefixedAttrs) return {};
   const attrs = options.attributesGroupName ? prefixedAttrs[options.attributesGroupName] : prefixedAttrs;
@@ -3965,7 +4042,7 @@ function sanitizeName(name, options) {
   return name;
 }
 
-// node_modules/fast-xml-parser/src/xmlparser/node2json.js
+// ../node_modules/fast-xml-parser/src/xmlparser/node2json.js
 var METADATA_SYMBOL2 = XmlNode.getMetaDataSymbol();
 function stripAttributePrefix(attrs, prefix) {
   if (!attrs || typeof attrs !== "object") return {};
@@ -4077,7 +4154,7 @@ function isLeafTag(obj, options) {
   return false;
 }
 
-// node_modules/fast-xml-parser/src/xmlparser/XMLParser.js
+// ../node_modules/fast-xml-parser/src/xmlparser/XMLParser.js
 var XMLParser = class {
   constructor(options) {
     this.externalEntities = {};
@@ -4137,12 +4214,12 @@ var XMLParser = class {
   }
 };
 
-// node_modules/fast-xml-parser/src/fxp.js
+// ../node_modules/fast-xml-parser/src/fxp.js
 var XMLValidator = {
   validate
 };
 
-// node_modules/zod/v3/external.js
+// ../node_modules/zod/v3/external.js
 var external_exports = {};
 __export(external_exports, {
   BRAND: () => BRAND,
@@ -4254,7 +4331,7 @@ __export(external_exports, {
   void: () => voidType
 });
 
-// node_modules/zod/v3/helpers/util.js
+// ../node_modules/zod/v3/helpers/util.js
 var util;
 (function(util2) {
   util2.assertEqual = (_) => {
@@ -4388,7 +4465,7 @@ var getParsedType = (data) => {
   }
 };
 
-// node_modules/zod/v3/ZodError.js
+// ../node_modules/zod/v3/ZodError.js
 var ZodIssueCode = util.arrayToEnum([
   "invalid_type",
   "invalid_literal",
@@ -4506,7 +4583,7 @@ ZodError.create = (issues) => {
   return error;
 };
 
-// node_modules/zod/v3/locales/en.js
+// ../node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -4609,7 +4686,7 @@ var errorMap = (issue, _ctx) => {
 };
 var en_default = errorMap;
 
-// node_modules/zod/v3/errors.js
+// ../node_modules/zod/v3/errors.js
 var overrideErrorMap = en_default;
 function setErrorMap(map) {
   overrideErrorMap = map;
@@ -4618,7 +4695,7 @@ function getErrorMap() {
   return overrideErrorMap;
 }
 
-// node_modules/zod/v3/helpers/parseUtil.js
+// ../node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
   const { data, path, errorMaps, issueData } = params;
   const fullPath = [...path, ...issueData.path || []];
@@ -4728,14 +4805,14 @@ var isDirty = (x) => x.status === "dirty";
 var isValid = (x) => x.status === "valid";
 var isAsync = (x) => typeof Promise !== "undefined" && x instanceof Promise;
 
-// node_modules/zod/v3/helpers/errorUtil.js
+// ../node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 (function(errorUtil2) {
   errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
   errorUtil2.toString = (message) => typeof message === "string" ? message : message?.message;
 })(errorUtil || (errorUtil = {}));
 
-// node_modules/zod/v3/types.js
+// ../node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
   constructor(parent, value, path, key) {
     this._cachedPath = [];
@@ -8183,7 +8260,7 @@ var coerce = {
 };
 var NEVER = INVALID;
 
-// lib/provinces.ts
+// ../lib/provinces.ts
 var provinces = [
   ["10", "\u0E01\u0E23\u0E38\u0E07\u0E40\u0E17\u0E1E\u0E21\u0E2B\u0E32\u0E19\u0E04\u0E23"],
   ["11", "\u0E2A\u0E21\u0E38\u0E17\u0E23\u0E1B\u0E23\u0E32\u0E01\u0E32\u0E23"],
@@ -8280,7 +8357,7 @@ var primaryProvinces = primaryProvinceCodes.map(
 );
 var otherProvinces = provinces.filter(([code]) => !primaryProvinceSet.has(code)).sort((a, b) => a[1].localeCompare(b[1], "th"));
 
-// lib/model.ts
+// ../lib/model.ts
 var iso = external_exports.string().datetime({ offset: true });
 var id = external_exports.string().min(1).max(160).regex(/^[\w.:-]+$/);
 var province = external_exports.string().refine((s) => provinceCodes.has(s), "Unknown province");
@@ -8438,7 +8515,7 @@ var BatchSchema = external_exports.object({
   }).optional()
 });
 
-// lib/cap.ts
+// ../lib/cap.ts
 var digest = (value) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 function xmlDocument(xml) {
   if (Buffer.byteLength(xml) > 2e6 || /<!DOCTYPE|<!ENTITY/i.test(xml))
@@ -8536,7 +8613,7 @@ function parseCapDocuments(documents, fetchedAt, options = {}) {
   });
 }
 
-// lib/ddpm.ts
+// ../lib/ddpm.ts
 import { createHash as createHash2 } from "node:crypto";
 var months = [
   "\u0E21\u0E01\u0E23\u0E32\u0E04\u0E21",
@@ -8645,14 +8722,16 @@ function parseDdpmEntry(row, fetchedAt) {
 // entry.ts
 import { writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
+var run = { id: randomUUID2(), startedAt: (/* @__PURE__ */ new Date()).toISOString(), trigger: process.env.DOONAM_RECOVERY_ID ? "recovery" : process.env.GITHUB_EVENT_NAME === "schedule" ? "schedule" : "manual", requests: 0, bytes: 0 };
+var monitoring = process.env.DOONAM_MONITOR_ENABLED === "1" && process.env.DOONAM_DRY_RUN !== "1";
 var stamp = () => (/* @__PURE__ */ new Date()).toISOString();
 async function read(url) {
   let r;
   try {
-    r = await fetch(url, {
-      redirect: "error",
-      signal: AbortSignal.timeout(25e3)
-    });
+    r = await boundedFetch(url, {}, { timeoutMs: 25e3, fetcher: async (input, init) => {
+      run.requests++;
+      return fetch(input, init);
+    } });
   } catch (e) {
     throw new Error(transportStage(e));
   }
@@ -8665,6 +8744,7 @@ async function read(url) {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.length;
+      run.bytes += value.length;
       if (size > 2e6) throw new Error("HTTP");
       parts.push(value);
     }
@@ -8879,6 +8959,7 @@ async function ddpm() {
 async function send(sourceId, batch, error) {
   const item = {
     sourceId,
+    ...sourceId === "tmd-cap" && monitoring ? { run } : {},
     fetchedAt: stamp(),
     ...batch ? { batch } : { error }
   };
@@ -8893,24 +8974,8 @@ async function send(sourceId, batch, error) {
     );
     return;
   }
-  const url = process.env.DOONAM_INGEST_URL, secret = process.env.DOONAM_INGEST_SECRET;
-  if (!url || !secret || !url.startsWith("https://"))
-    throw new Error("Missing collector configuration");
-  const body = JSON.stringify(item), timestamp = String(Date.now()), nonce = randomUUID();
-  const signature = createHmac("sha256", secret).update(`${timestamp}.${nonce}.${body}`).digest("hex");
-  const r = await fetch(url, {
-    method: "POST",
-    redirect: "error",
-    signal: AbortSignal.timeout(3e4),
-    headers: {
-      "Content-Type": "application/json",
-      "x-doonam-time": timestamp,
-      "x-doonam-nonce": nonce,
-      "x-doonam-signature": signature
-    },
-    body
-  });
-  if (!r.ok) throw new Error(`Ingest HTTP ${r.status}`);
+  const result = await signedPost("ingest", item);
+  if (!result.accepted) throw new DeliveryError("Import not accepted");
   console.log(
     sourceId,
     "accepted",
@@ -8924,14 +8989,29 @@ for (const [id2, collect] of [
   ["ddpm", ddpm]
 ]) {
   try {
-    if (id2 === "ddpm" && process.env.DOONAM_DDPM_ENABLED !== "1") {
+    if (id2 === "ddpm" && (process.env.DOONAM_DDPM_ENABLED !== "1" || process.env.DOONAM_COLLECT_TARGET === "tmd-cap")) {
       console.log("ddpm disabled: no fetch, no ingest");
       continue;
+    }
+    if (id2 === "tmd-cap" && monitoring) {
+      const claim = await signedPost("refresh", { sourceId: id2, action: "start", run });
+      if (!claim.claimed) {
+        console.log("tmd-cap skipped: another run owns this interval");
+        continue;
+      }
     }
     const batch = await collect();
     await send(id2, batch);
   } catch (e) {
     failed = true;
+    if (e instanceof DeliveryError && id2 === "tmd-cap" && monitoring) {
+      console.error(id2, "INGEST");
+      try {
+        await signedPost("refresh", { sourceId: id2, action: "failure", run, stage: "store", code: "INGEST" });
+      } catch {
+      }
+      continue;
+    }
     const raw = e.message;
     const code = ["TLS", "HTTP", "RSS", "CAP", "DATE", "ACCESS"].includes(raw) ? raw : id2 === "ddpm" ? "DOM" : "NETWORK";
     console.error(id2, code);

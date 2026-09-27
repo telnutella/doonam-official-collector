@@ -13,7 +13,7 @@ Public collector only. The website source, databases, and secrets are not includ
 Configure repository variable `DOONAM_INGEST_URL` and Actions secret `DOONAM_INGEST_SECRET`.
 The matching secret must be stored in Sites, never in files or logs. Payloads are HMAC-SHA256 signed with time and nonce. The receiver checks size, source, freshness and replay.
 
-`collect.mjs` is the bundled collector. `entry.ts` and `lib/` are auditable collector-only source. Build with esbuild (external playwright), then run `npm ci`, `npx playwright install --with-deps chromium`, `python3 -m pip install pypdf==6.10.0` and `NODE_EXTRA_CA_CERTS=certs/globalsign-intermediate.crt npm run collect`.
+`collect.mjs` is the bundled collector. `entry.ts` and `lib/` are auditable collector-only source. Run `npm ci --ignore-scripts`, `npm run build`, then `NODE_EXTRA_CA_CERTS=certs/globalsign-intermediate.crt npm run collect`. Browser/PDF tools are required only when DDPM is explicitly enabled; source-specific TMD recovery never installs them.
 
 The intermediate certificate is public, retrieved via HTTPS from https://secure.globalsign.com/cacert/gsgccr6alphasslca2025.crt (issuer URL in the TMD leaf certificate). It supplements the standard trusted root store. Hostname, expiry and chain verification remain enabled. Never set NODE_TLS_REJECT_UNAUTHORIZED=0 or ignoreHTTPSErrors.
 
@@ -50,3 +50,13 @@ Run `npm run build:roads` then `DOONAM_DRY_RUN=1 npm run collect:roads`. Live mo
 ThaiWater and explicitly located iTIC reports accept canonical province codes for all 77 provinces. Traffy remains Bangkok-only. Unknown administrative codes are never truncated. Disabled DDPM logs a skip and makes no source or ingest request.
 
 The website uses per-province latest snapshots; historical station writes stay in the original eight provinces. Collector validation uses a separate branch with forced dry-run; do not merge that validation workflow into production. Export the canonical `collector/.github/workflows/collect.yml` only after the Site release is approved.
+
+## Source monitoring and bounded recovery
+
+`DOONAM_MONITOR_ENABLED=1` registers TMD runs before collection and attaches their UUID, source request count and bytes to the signed import. Enable the matching Sites flag first. Success means the receiver validated and committed the import; heartbeat delivery is done by Sites after that commit, never by a green workflow or a job start. The collector receives neither Healthchecks credentials nor the recovery dispatch token.
+
+`rain.ts` calls only the site's signed internal rain-refresh endpoint. Build with `npm run build:rain`; run with `npm run collect:rain`. The existing server adapter, source lock and eight-province history scope remain authoritative. Scheduled rain requires repository variable `DOONAM_RAIN_SCHEDULED=1` and the corresponding Sites setting, after real-import and quota verification. Manual `target=thaiwater-rain` is available for staged verification before enabling the schedule. Dry runs do not call the import endpoint.
+
+Workflow dispatch accepts `target=all`, `tmd-cap`, or `thaiwater-rain`. Recovery selects exactly one source and includes its incident ID. Each source has its own concurrency group; road and reservoir jobs are not rerun for a source recovery. All network requests retain TLS verification. Idempotent calls retry at most three times with a fresh signing nonce per attempt; workflow dispatch itself is never blindly retried after an uncertain response.
+
+Turning these variables off leaves the original collection path available. Do not claim independent monitoring or 48-hour acceptance until real Healthchecks delivery, restricted dispatch credentials and the actual observation window have been verified. Schedules can be delayed by GitHub.

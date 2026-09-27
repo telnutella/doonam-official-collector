@@ -1,4 +1,9 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { boundedFetch } from "./lib/bounded-fetch";
+import { signedPost, DeliveryError } from "./client";
+import type { MonitorRun } from "./lib/monitor-model";
+const run: MonitorRun = { id: randomUUID(), startedAt: new Date().toISOString(), trigger: process.env.DOONAM_RECOVERY_ID ? "recovery" : process.env.GITHUB_EVENT_NAME === "schedule" ? "schedule" : "manual", requests: 0, bytes: 0 };
+const monitoring = process.env.DOONAM_MONITOR_ENABLED === "1" && process.env.DOONAM_DRY_RUN !== "1";
 import { transportStage } from "./lib/source-errors";
 import { capLinks, parseCapDocuments } from "./lib/cap";
 import { BatchSchema, type Batch } from "./lib/model";
@@ -15,10 +20,7 @@ const stamp = () => new Date().toISOString();
 async function read(url: string) {
   let r: Response;
   try {
-    r = await fetch(url, {
-      redirect: "error",
-      signal: AbortSignal.timeout(25000),
-    });
+    r = await boundedFetch(url, {}, { timeoutMs: 25000, fetcher: async (input, init) => { run.requests++; return fetch(input, init); } });
   } catch (e) {
     throw new Error(transportStage(e));
   }
@@ -31,6 +33,7 @@ async function read(url: string) {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.length;
+      run.bytes += value.length;
       if (size > 2_000_000) throw new Error("HTTP");
       parts.push(value);
     }
@@ -269,6 +272,7 @@ async function ddpm() {
 async function send(sourceId: string, batch?: Batch, error?: string) {
   const item = {
     sourceId,
+    ...(sourceId === "tmd-cap" && monitoring ? { run } : {}),
     fetchedAt: stamp(),
     ...(batch ? { batch } : { error }),
   };
@@ -285,29 +289,8 @@ async function send(sourceId: string, batch?: Batch, error?: string) {
     );
     return;
   }
-  const url = process.env.DOONAM_INGEST_URL,
-    secret = process.env.DOONAM_INGEST_SECRET;
-  if (!url || !secret || !url.startsWith("https://"))
-    throw new Error("Missing collector configuration");
-  const body = JSON.stringify(item),
-    timestamp = String(Date.now()),
-    nonce = randomUUID();
-  const signature = createHmac("sha256", secret)
-    .update(`${timestamp}.${nonce}.${body}`)
-    .digest("hex");
-  const r = await fetch(url, {
-    method: "POST",
-    redirect: "error",
-    signal: AbortSignal.timeout(30000),
-    headers: {
-      "Content-Type": "application/json",
-      "x-doonam-time": timestamp,
-      "x-doonam-nonce": nonce,
-      "x-doonam-signature": signature,
-    },
-    body,
-  });
-  if (!r.ok) throw new Error(`Ingest HTTP ${r.status}`);
+  const result = await signedPost("ingest", item);
+  if (!result.accepted) throw new DeliveryError("Import not accepted");
   console.log(
     sourceId,
     "accepted",
@@ -323,14 +306,23 @@ for (const [id, collect] of [
   ["ddpm", ddpm],
 ] as const) {
   try {
-    if (id === "ddpm" && process.env.DOONAM_DDPM_ENABLED !== "1") {
+    if (id === "ddpm" && (process.env.DOONAM_DDPM_ENABLED !== "1" || process.env.DOONAM_COLLECT_TARGET === "tmd-cap")) {
       console.log("ddpm disabled: no fetch, no ingest");
       continue;
+    }
+    if (id === "tmd-cap" && monitoring) {
+      const claim = await signedPost("refresh", { sourceId: id, action: "start", run });
+      if (!claim.claimed) { console.log("tmd-cap skipped: another run owns this interval"); continue; }
     }
     const batch = await collect();
     await send(id, batch);
   } catch (e) {
     failed = true;
+    if (e instanceof DeliveryError && id === "tmd-cap" && monitoring) {
+      console.error(id, "INGEST");
+      try { await signedPost("refresh", { sourceId: id, action: "failure", run, stage: "store", code: "INGEST" }); } catch { /* The running record times out if storage is unavailable. */ }
+      continue;
+    }
     const raw = (e as Error).message;
     const code = ["TLS", "HTTP", "RSS", "CAP", "DATE", "ACCESS"].includes(raw)
       ? raw

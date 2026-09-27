@@ -5,3 +5,4 @@ node_modules/
 *.tsbuildinfo
 reservoirs.mjs
 roads.mjs
+rain.mjs

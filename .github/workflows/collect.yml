@@ -1,20 +1,31 @@
 name: Collect official water bulletins
+run-name: "doonam:${{ inputs.target || 'all' }}:${{ inputs.recovery_id || github.event_name }}"
 on:
   schedule:
     - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
     inputs:
+      target:
+        description: Run only the requested source
+        type: choice
+        options: [all, tmd-cap, thaiwater-rain]
+        default: all
+      recovery_id:
+        description: Correlation only; never used as a URL or command
+        type: string
+        default: ''
       dry_run:
         description: Validate upstream sources without publishing
         type: boolean
         default: false
 permissions:
   contents: read
-concurrency:
-  group: official-water-collector
-  cancel-in-progress: false
 jobs:
   collect:
+    if: github.event_name == 'schedule' || inputs.target == 'all' || inputs.target == 'tmd-cap'
+    concurrency:
+      group: official-water-tmd
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -25,18 +36,46 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run build
-      - if: vars.DOONAM_DDPM_ENABLED == '1'
+      - if: vars.DOONAM_DDPM_ENABLED == '1' && inputs.target != 'tmd-cap'
         run: npx playwright install --with-deps chromium
-      - if: vars.DOONAM_DDPM_ENABLED == '1'
+      - if: vars.DOONAM_DDPM_ENABLED == '1' && inputs.target != 'tmd-cap'
         run: python3 -m pip install pypdf==6.10.0
       - run: npm run collect
         env:
+          DOONAM_MONITOR_ENABLED: ${{ vars.DOONAM_MONITOR_ENABLED || '0' }}
+          DOONAM_COLLECT_TARGET: ${{ inputs.target || 'all' }}
+          DOONAM_RECOVERY_ID: ${{ inputs.recovery_id }}
           DOONAM_DDPM_ENABLED: ${{ vars.DOONAM_DDPM_ENABLED || '0' }}
           DOONAM_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
           NODE_EXTRA_CA_CERTS: certs/globalsign-intermediate.crt
           DOONAM_INGEST_URL: ${{ vars.DOONAM_INGEST_URL }}
           DOONAM_INGEST_SECRET: ${{ secrets.DOONAM_INGEST_SECRET }}
+  rain:
+    if: inputs.target == 'thaiwater-rain' || (vars.DOONAM_RAIN_SCHEDULED == '1' && (github.event_name == 'schedule' || inputs.target == 'all'))
+    concurrency:
+      group: official-water-rain
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build:rain
+      - run: npm run collect:rain
+        env:
+          DOONAM_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+          DOONAM_RECOVERY_ID: ${{ inputs.recovery_id }}
+          DOONAM_INGEST_URL: ${{ vars.DOONAM_INGEST_URL }}
+          DOONAM_INGEST_SECRET: ${{ secrets.DOONAM_INGEST_SECRET }}
   roads:
+    if: github.event_name == 'schedule' || inputs.target == 'all'
+    concurrency:
+      group: official-water-roads
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 14
     steps:
