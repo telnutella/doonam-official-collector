@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { signedPost } from "./client";
+import { rainScheduleEnabled } from "./lib/rain-schedule";
 const run = {
   id: randomUUID(),
   startedAt: new Date().toISOString(),
@@ -11,7 +12,9 @@ const run = {
   requests: 0,
   bytes: 0,
 };
-if (process.env.DOONAM_DRY_RUN === "1") {
+if (run.trigger === "schedule" && !rainScheduleEnabled(process.env)) {
+  console.log("rain schedule is disabled or its trial has ended; no refresh requested");
+} else if (process.env.DOONAM_DRY_RUN === "1") {
   console.log(
     "rain dry run: signed refresh is disabled; validate parser through local tests",
   );

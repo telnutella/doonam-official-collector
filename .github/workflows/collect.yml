@@ -67,6 +67,8 @@ jobs:
       - run: npm run build:rain
       - run: npm run collect:rain
         env:
+          DOONAM_RAIN_SCHEDULED: ${{ vars.DOONAM_RAIN_SCHEDULED || '0' }}
+          DOONAM_RAIN_SCHEDULED_UNTIL: ${{ vars.DOONAM_RAIN_SCHEDULED_UNTIL }}
           DOONAM_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
           DOONAM_RECOVERY_ID: ${{ inputs.recovery_id }}
           DOONAM_INGEST_URL: ${{ vars.DOONAM_INGEST_URL }}

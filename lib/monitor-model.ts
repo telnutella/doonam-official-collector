@@ -38,6 +38,7 @@ export function thaiDateKey(now: number) {
 export type SourceHealth = {
   sourceId: MonitoredSource;
   enabled: boolean;
+  scheduledUntil?: string | null;
   recoveryEnabled: boolean;
   recoveryTokenExpiresAt?: string | null;
   lastSuccess: string | null;
@@ -77,6 +78,11 @@ export type SourceHealth = {
     bytes: number;
     rowsRead: number;
     rowsWritten: number;
+    scheduledRuns?: number;
+    scheduledSuccessfulRuns?: number;
+    manualRuns?: number;
+    recoveryRuns?: number;
+    firstScheduledAt?: string | null;
   };
 };
 export type SourceHealthResponse = {
