@@ -4,8 +4,7 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// collector/entry.ts
-import { chromium } from "playwright";
+// entry.ts
 import { createHmac, randomUUID } from "node:crypto";
 
 // lib/cap.ts
@@ -8172,12 +8171,104 @@ var coerce = {
 };
 var NEVER = INVALID;
 
-// lib/model.ts
-var provinceCodes = new Set(
-  "10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 60 61 62 63 64 65 66 67 70 71 72 73 74 75 76 77 80 81 82 83 84 85 86 90 91 92 93 94 95 96".split(
-    " "
-  )
+// lib/provinces.ts
+var provinces = [
+  ["10", "\u0E01\u0E23\u0E38\u0E07\u0E40\u0E17\u0E1E\u0E21\u0E2B\u0E32\u0E19\u0E04\u0E23"],
+  ["11", "\u0E2A\u0E21\u0E38\u0E17\u0E23\u0E1B\u0E23\u0E32\u0E01\u0E32\u0E23"],
+  ["12", "\u0E19\u0E19\u0E17\u0E1A\u0E38\u0E23\u0E35"],
+  ["13", "\u0E1B\u0E17\u0E38\u0E21\u0E18\u0E32\u0E19\u0E35"],
+  ["14", "\u0E1E\u0E23\u0E30\u0E19\u0E04\u0E23\u0E28\u0E23\u0E35\u0E2D\u0E22\u0E38\u0E18\u0E22\u0E32"],
+  ["15", "\u0E2D\u0E48\u0E32\u0E07\u0E17\u0E2D\u0E07"],
+  ["16", "\u0E25\u0E1E\u0E1A\u0E38\u0E23\u0E35"],
+  ["17", "\u0E2A\u0E34\u0E07\u0E2B\u0E4C\u0E1A\u0E38\u0E23\u0E35"],
+  ["18", "\u0E0A\u0E31\u0E22\u0E19\u0E32\u0E17"],
+  ["19", "\u0E2A\u0E23\u0E30\u0E1A\u0E38\u0E23\u0E35"],
+  ["20", "\u0E0A\u0E25\u0E1A\u0E38\u0E23\u0E35"],
+  ["21", "\u0E23\u0E30\u0E22\u0E2D\u0E07"],
+  ["22", "\u0E08\u0E31\u0E19\u0E17\u0E1A\u0E38\u0E23\u0E35"],
+  ["23", "\u0E15\u0E23\u0E32\u0E14"],
+  ["24", "\u0E09\u0E30\u0E40\u0E0A\u0E34\u0E07\u0E40\u0E17\u0E23\u0E32"],
+  ["25", "\u0E1B\u0E23\u0E32\u0E08\u0E35\u0E19\u0E1A\u0E38\u0E23\u0E35"],
+  ["26", "\u0E19\u0E04\u0E23\u0E19\u0E32\u0E22\u0E01"],
+  ["27", "\u0E2A\u0E23\u0E30\u0E41\u0E01\u0E49\u0E27"],
+  ["30", "\u0E19\u0E04\u0E23\u0E23\u0E32\u0E0A\u0E2A\u0E35\u0E21\u0E32"],
+  ["31", "\u0E1A\u0E38\u0E23\u0E35\u0E23\u0E31\u0E21\u0E22\u0E4C"],
+  ["32", "\u0E2A\u0E38\u0E23\u0E34\u0E19\u0E17\u0E23\u0E4C"],
+  ["33", "\u0E28\u0E23\u0E35\u0E2A\u0E30\u0E40\u0E01\u0E29"],
+  ["34", "\u0E2D\u0E38\u0E1A\u0E25\u0E23\u0E32\u0E0A\u0E18\u0E32\u0E19\u0E35"],
+  ["35", "\u0E22\u0E42\u0E2A\u0E18\u0E23"],
+  ["36", "\u0E0A\u0E31\u0E22\u0E20\u0E39\u0E21\u0E34"],
+  ["37", "\u0E2D\u0E33\u0E19\u0E32\u0E08\u0E40\u0E08\u0E23\u0E34\u0E0D"],
+  ["38", "\u0E1A\u0E36\u0E07\u0E01\u0E32\u0E2C"],
+  ["39", "\u0E2B\u0E19\u0E2D\u0E07\u0E1A\u0E31\u0E27\u0E25\u0E33\u0E20\u0E39"],
+  ["40", "\u0E02\u0E2D\u0E19\u0E41\u0E01\u0E48\u0E19"],
+  ["41", "\u0E2D\u0E38\u0E14\u0E23\u0E18\u0E32\u0E19\u0E35"],
+  ["42", "\u0E40\u0E25\u0E22"],
+  ["43", "\u0E2B\u0E19\u0E2D\u0E07\u0E04\u0E32\u0E22"],
+  ["44", "\u0E21\u0E2B\u0E32\u0E2A\u0E32\u0E23\u0E04\u0E32\u0E21"],
+  ["45", "\u0E23\u0E49\u0E2D\u0E22\u0E40\u0E2D\u0E47\u0E14"],
+  ["46", "\u0E01\u0E32\u0E2C\u0E2A\u0E34\u0E19\u0E18\u0E38\u0E4C"],
+  ["47", "\u0E2A\u0E01\u0E25\u0E19\u0E04\u0E23"],
+  ["48", "\u0E19\u0E04\u0E23\u0E1E\u0E19\u0E21"],
+  ["49", "\u0E21\u0E38\u0E01\u0E14\u0E32\u0E2B\u0E32\u0E23"],
+  ["50", "\u0E40\u0E0A\u0E35\u0E22\u0E07\u0E43\u0E2B\u0E21\u0E48"],
+  ["51", "\u0E25\u0E33\u0E1E\u0E39\u0E19"],
+  ["52", "\u0E25\u0E33\u0E1B\u0E32\u0E07"],
+  ["53", "\u0E2D\u0E38\u0E15\u0E23\u0E14\u0E34\u0E15\u0E16\u0E4C"],
+  ["54", "\u0E41\u0E1E\u0E23\u0E48"],
+  ["55", "\u0E19\u0E48\u0E32\u0E19"],
+  ["56", "\u0E1E\u0E30\u0E40\u0E22\u0E32"],
+  ["57", "\u0E40\u0E0A\u0E35\u0E22\u0E07\u0E23\u0E32\u0E22"],
+  ["58", "\u0E41\u0E21\u0E48\u0E2E\u0E48\u0E2D\u0E07\u0E2A\u0E2D\u0E19"],
+  ["60", "\u0E19\u0E04\u0E23\u0E2A\u0E27\u0E23\u0E23\u0E04\u0E4C"],
+  ["61", "\u0E2D\u0E38\u0E17\u0E31\u0E22\u0E18\u0E32\u0E19\u0E35"],
+  ["62", "\u0E01\u0E33\u0E41\u0E1E\u0E07\u0E40\u0E1E\u0E0A\u0E23"],
+  ["63", "\u0E15\u0E32\u0E01"],
+  ["64", "\u0E2A\u0E38\u0E42\u0E02\u0E17\u0E31\u0E22"],
+  ["65", "\u0E1E\u0E34\u0E29\u0E13\u0E38\u0E42\u0E25\u0E01"],
+  ["66", "\u0E1E\u0E34\u0E08\u0E34\u0E15\u0E23"],
+  ["67", "\u0E40\u0E1E\u0E0A\u0E23\u0E1A\u0E39\u0E23\u0E13\u0E4C"],
+  ["70", "\u0E23\u0E32\u0E0A\u0E1A\u0E38\u0E23\u0E35"],
+  ["71", "\u0E01\u0E32\u0E0D\u0E08\u0E19\u0E1A\u0E38\u0E23\u0E35"],
+  ["72", "\u0E2A\u0E38\u0E1E\u0E23\u0E23\u0E13\u0E1A\u0E38\u0E23\u0E35"],
+  ["73", "\u0E19\u0E04\u0E23\u0E1B\u0E10\u0E21"],
+  ["74", "\u0E2A\u0E21\u0E38\u0E17\u0E23\u0E2A\u0E32\u0E04\u0E23"],
+  ["75", "\u0E2A\u0E21\u0E38\u0E17\u0E23\u0E2A\u0E07\u0E04\u0E23\u0E32\u0E21"],
+  ["76", "\u0E40\u0E1E\u0E0A\u0E23\u0E1A\u0E38\u0E23\u0E35"],
+  ["77", "\u0E1B\u0E23\u0E30\u0E08\u0E27\u0E1A\u0E04\u0E35\u0E23\u0E35\u0E02\u0E31\u0E19\u0E18\u0E4C"],
+  ["80", "\u0E19\u0E04\u0E23\u0E28\u0E23\u0E35\u0E18\u0E23\u0E23\u0E21\u0E23\u0E32\u0E0A"],
+  ["81", "\u0E01\u0E23\u0E30\u0E1A\u0E35\u0E48"],
+  ["82", "\u0E1E\u0E31\u0E07\u0E07\u0E32"],
+  ["83", "\u0E20\u0E39\u0E40\u0E01\u0E47\u0E15"],
+  ["84", "\u0E2A\u0E38\u0E23\u0E32\u0E29\u0E0E\u0E23\u0E4C\u0E18\u0E32\u0E19\u0E35"],
+  ["85", "\u0E23\u0E30\u0E19\u0E2D\u0E07"],
+  ["86", "\u0E0A\u0E38\u0E21\u0E1E\u0E23"],
+  ["90", "\u0E2A\u0E07\u0E02\u0E25\u0E32"],
+  ["91", "\u0E2A\u0E15\u0E39\u0E25"],
+  ["92", "\u0E15\u0E23\u0E31\u0E07"],
+  ["93", "\u0E1E\u0E31\u0E17\u0E25\u0E38\u0E07"],
+  ["94", "\u0E1B\u0E31\u0E15\u0E15\u0E32\u0E19\u0E35"],
+  ["95", "\u0E22\u0E30\u0E25\u0E32"],
+  ["96", "\u0E19\u0E23\u0E32\u0E18\u0E34\u0E27\u0E32\u0E2A"]
+];
+var provinceCodes = new Set(provinces.map(([code]) => code));
+var primaryProvinceCodes = [
+  "10",
+  "12",
+  "13",
+  "11",
+  "73",
+  "74",
+  "14",
+  "76"
+];
+var primaryProvinceSet = new Set(primaryProvinceCodes);
+var primaryProvinces = primaryProvinceCodes.map(
+  (code) => provinces.find(([id2]) => id2 === code)
 );
+var otherProvinces = provinces.filter(([code]) => !primaryProvinceSet.has(code)).sort((a, b) => a[1].localeCompare(b[1], "th"));
+
+// lib/model.ts
 var iso = external_exports.string().datetime({ offset: true });
 var id = external_exports.string().min(1).max(160).regex(/^[\w.:-]+$/);
 var province = external_exports.string().refine((s) => provinceCodes.has(s), "Unknown province");
@@ -8193,7 +8284,9 @@ var StationSchema = external_exports.object({
   sourceUrl: https,
   districtName: external_exports.string().min(1).max(150).nullable().optional(),
   subdistrictName: external_exports.string().min(1).max(150).nullable().optional(),
-  agencyName: external_exports.string().max(300).optional()
+  agencyName: external_exports.string().max(300).optional(),
+  basinId: external_exports.string().max(50).nullable().optional(),
+  basinName: external_exports.string().max(150).nullable().optional()
 });
 var ObservationSchema = external_exports.object({
   stationId: id,
@@ -8208,7 +8301,13 @@ var ObservationSchema = external_exports.object({
   fetchedAt: iso,
   quality: external_exports.enum(["valid", "unverified", "missing", "invalid"]),
   sourceQuality: external_exports.string().nullable(),
-  expectedIntervalMinutes: external_exports.number().positive()
+  expectedIntervalMinutes: external_exports.number().positive(),
+  bankLevelMsl: external_exports.number().finite().optional(),
+  change: external_exports.object({
+    centimeters: external_exports.number().finite(),
+    minutes: external_exports.number().positive(),
+    fromAt: iso
+  }).optional()
 }).superRefine((o, ctx) => {
   if (o.metric === "rainfall" && (o.unit !== "mm" || o.datum !== "none" || o.value !== null && o.value < 0) || o.metric === "waterLevel" && (o.unit !== "m" || o.datum === "none" || o.accumulationMinutes !== null)) {
     ctx.addIssue({ code: "custom", message: "Metric/unit/datum mismatch" });
@@ -8236,6 +8335,9 @@ var AlertSchema = external_exports.object({
     ctx.addIssue({ code: "custom", message: "Invalid validity interval" });
 });
 var ReportSchema = external_exports.object({
+  lastSeenAt: iso.optional(),
+  missingSince: iso.nullable().optional(),
+  road: external_exports.object({ name: external_exports.string().min(1).max(140), kind: external_exports.enum(["road", "soi"]) }).nullable().optional(),
   id,
   sourceId: id,
   revision: id,
@@ -8282,12 +8384,37 @@ var BulletinSchema = external_exports.object({
   sourceUrl: https,
   attachmentUrls: external_exports.array(https).max(20)
 });
+var IncidentSchema = external_exports.object({
+  lastSeenAt: iso.optional(),
+  missingSince: iso.nullable().optional(),
+  id,
+  sourceId: external_exports.literal("itic"),
+  sourceIncidentId: id,
+  revision: id,
+  title: external_exports.string().min(1).max(1e3),
+  body: external_exports.string().max(2e4),
+  kind: external_exports.enum(["flood", "rain", "roadClosure"]),
+  provinceCode: province.nullable(),
+  districtName: external_exports.string().max(150).nullable(),
+  subdistrictName: external_exports.string().max(150).nullable(),
+  latitude: external_exports.number().min(-90).max(90).nullable(),
+  longitude: external_exports.number().min(-180).max(180).nullable(),
+  startedAt: iso,
+  publishedAt: iso,
+  endsAt: iso,
+  fetchedAt: iso,
+  sourceUrl: https,
+  imageCount: external_exports.number().int().min(0).max(100),
+  sourceStatus: external_exports.string().max(20),
+  attribution: external_exports.string().max(200)
+});
 var BatchSchema = external_exports.object({
   sourceId: id,
   stations: external_exports.array(StationSchema),
   observations: external_exports.array(ObservationSchema),
   alerts: external_exports.array(AlertSchema),
   reports: external_exports.array(ReportSchema).optional(),
+  incidents: external_exports.array(IncidentSchema).max(5e3).optional(),
   bulletins: external_exports.array(BulletinSchema).max(300).optional(),
   coverage: external_exports.object({
     partial: external_exports.boolean(),
@@ -8399,20 +8526,6 @@ function parseCapDocuments(documents, fetchedAt, options = {}) {
 
 // lib/ddpm.ts
 import { createHash as createHash2 } from "node:crypto";
-
-// lib/provinces.ts
-var provinces = [
-  ["10", "\u0E01\u0E23\u0E38\u0E07\u0E40\u0E17\u0E1E\u0E21\u0E2B\u0E32\u0E19\u0E04\u0E23"],
-  ["12", "\u0E19\u0E19\u0E17\u0E1A\u0E38\u0E23\u0E35"],
-  ["13", "\u0E1B\u0E17\u0E38\u0E21\u0E18\u0E32\u0E19\u0E35"],
-  ["11", "\u0E2A\u0E21\u0E38\u0E17\u0E23\u0E1B\u0E23\u0E32\u0E01\u0E32\u0E23"],
-  ["73", "\u0E19\u0E04\u0E23\u0E1B\u0E10\u0E21"],
-  ["74", "\u0E2A\u0E21\u0E38\u0E17\u0E23\u0E2A\u0E32\u0E04\u0E23"],
-  ["14", "\u0E1E\u0E23\u0E30\u0E19\u0E04\u0E23\u0E28\u0E23\u0E35\u0E2D\u0E22\u0E38\u0E18\u0E22\u0E32"],
-  ["76", "\u0E40\u0E1E\u0E0A\u0E23\u0E1A\u0E38\u0E23\u0E35"]
-];
-
-// lib/ddpm.ts
 var months = [
   "\u0E21\u0E01\u0E23\u0E32\u0E04\u0E21",
   "\u0E01\u0E38\u0E21\u0E20\u0E32\u0E1E\u0E31\u0E19\u0E18\u0E4C",
@@ -8517,7 +8630,7 @@ function parseDdpmEntry(row, fetchedAt) {
   });
 }
 
-// collector/entry.ts
+// entry.ts
 import { writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 var stamp = () => (/* @__PURE__ */ new Date()).toISOString();
@@ -8610,6 +8723,7 @@ async function pdfText(url) {
   });
 }
 async function ddpm() {
+  const { chromium } = await import("playwright");
   const browser = await chromium.launch({
     headless: true,
     executablePath: process.env.DOONAM_CHROMIUM
@@ -8802,8 +8916,8 @@ for (const [id2, collect] of [
   ["ddpm", ddpm]
 ]) {
   try {
-    if (id2 === "ddpm" && process.env.DOONAM_DDPM_ENABLED === "0") {
-      await send(id2, void 0, "ACCESS");
+    if (id2 === "ddpm" && process.env.DOONAM_DDPM_ENABLED !== "1") {
+      console.log("ddpm disabled: no fetch, no ingest");
       continue;
     }
     const batch = await collect();

@@ -23,9 +23,9 @@ Source links: https://www.tmd.go.th/api/xml/CAP and https://www.disaster.go.th/h
 
 ## Current DDPM availability
 
-Verified 2026-09-26: public rendered articles can be read locally, but GitHub-hosted runners receive a Cloudflare human-verification challenge. Scheduled DDPM collection is disabled (`DOONAM_DDPM_ENABLED=0`) until an authorized supported channel is available. TMD collection continues. The receiver reports DDPM ACCESS/unavailable and preserves any previously collected records. Do not bypass the challenge or copy browser/API credentials.
+Verified 2026-09-26: public rendered articles can be read locally, but GitHub-hosted runners receive a Cloudflare human-verification challenge. Scheduled DDPM collection is disabled (`DOONAM_DDPM_ENABLED=0`) until an authorized supported channel is available. TMD collection continues. Disabled DDPM performs no fetch and sends no periodic failure to the receiver. The website marks it as disabled and preserves any previously collected records. Browser/PDF installation is skipped. Do not bypass the challenge or copy browser/API credentials.
 
-Set `DOONAM_DDPM_ENABLED=1` only after verifying that the normal public browser flow works on the selected runner.
+Set `DOONAM_DDPM_ENABLED=1` on both collector and Site only after two successful full public-flow runs on the selected runner, including dates, areas and source links.
 
 ## Daily reservoirs
 
@@ -44,3 +44,9 @@ The independent `roads` job in the existing 15-minute workflow reads iTIC RSS an
 Traffy uses 300 records per page and at most ten upstream page requests per run including bounded retries. Today and yesterday get up to four pages each, then an older day rotates through the seven-day window. Continuation offsets come from the site's public metadata endpoint. Pagination, changing totals, repeated pages and incomplete scans remain marked partial; only a complete stable scan can record absence. Absence/closed tickets never mean the road is dry or passable. Source failures preserve saved evidence.
 
 Run `npm run build:roads` then `DOONAM_DRY_RUN=1 npm run collect:roads`. Live mode sends chunks of at most 25 records to the existing signed endpoint. Logs contain request counts, transmitted bytes and D1 rows written returned by the receiver, not secrets or raw reports. Seven-day history starts when collection is first enabled; no invented earlier revisions. Source schedules are approximate and standard GitHub runners can be delayed. No billing or paid Maps API is enabled.
+
+## Province expansion and validation
+
+ThaiWater and explicitly located iTIC reports accept canonical province codes for all 77 provinces. Traffy remains Bangkok-only. Unknown administrative codes are never truncated. Disabled DDPM logs a skip and makes no source or ingest request.
+
+The website uses per-province latest snapshots; historical station writes stay in the original eight provinces. Collector validation uses a separate branch with forced dry-run; do not merge that validation workflow into production. Export the canonical `collector/.github/workflows/collect.yml` only after the Site release is approved.

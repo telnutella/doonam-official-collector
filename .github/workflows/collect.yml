@@ -25,8 +25,10 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
-      - run: python3 -m pip install pypdf==6.10.0
+      - if: vars.DOONAM_DDPM_ENABLED == '1'
+        run: npx playwright install --with-deps chromium
+      - if: vars.DOONAM_DDPM_ENABLED == '1'
+        run: python3 -m pip install pypdf==6.10.0
       - run: npm run collect
         env:
           DOONAM_DDPM_ENABLED: ${{ vars.DOONAM_DDPM_ENABLED || '0' }}

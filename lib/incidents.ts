@@ -57,8 +57,7 @@ export function parseItic(xml: string, fetchedAt: string): Batch {
         throw new Error("Invalid incident link");
       const body = clean(row.description);
       const text = `${title} ${body}`;
-      // An explicit out-of-scope province must not be presented as an
-      // unlocated event in the pilot. Never infer administrative areas from a
+      // Accept only canonical provinces. Never infer administrative areas from a
       // nearby station or from coordinates alone.
       const explicitProvinces = [
         ...body.matchAll(/(?:จังหวัด|จ\.)\s*([^\s,;]+)/gu),
