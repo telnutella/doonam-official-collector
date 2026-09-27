@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { extractRoadName } from "./road-names";
 import { z } from "zod";
-import { provinces } from "./provinces";
+import { primaryProvinces } from "./provinces";
 import { preferReport, traffyCaseUrl } from "./reports";
 import {
   BatchSchema,
@@ -11,7 +11,7 @@ import {
   type Station,
 } from "./model";
 
-export const pilotProvinces = new Map<string, string>(provinces);
+export const pilotProvinces = new Map<string, string>(primaryProvinces);
 export const candidateEndpoints = {
   water:
     "https://api-v3.thaiwater.net/api/v1/thaiwater30/public/waterlevel_load",
@@ -136,13 +136,13 @@ export function parseThaiWater(
   if (!outer.length) throw new Error("Empty observation response");
   const stations: Station[] = [],
     observations: Batch["observations"] = [];
+  let rejected = 0;
   for (const item of outer) {
-    // Only the explicitly scoped provinces enter this pilot; validate their
-    // entire row before writing anything. Out-of-scope stations are not coverage.
-    const location = z
-      .object({ geocode: z.object({ province_code: z.string() }) })
-      .parse(item);
-    if (!pilotProvinces.has(location.geocode.province_code)) continue;
+    const startStations = stations.length, startObservations = observations.length;
+    try {
+    const location = z.object({ geocode: z.object({ province_code: z.string() }) }).parse(item);
+    // Never truncate district/unknown codes into plausible province codes.
+    if (!provinceCodes.has(location.geocode.province_code)) { rejected++; continue; }
     const row = (kind === "water" ? waterRow : rainRow).parse(item);
     const s = metadata(row, sourceId);
     stations.push(s);
@@ -200,8 +200,20 @@ export function parseThaiWater(
         });
       }
     }
+    BatchSchema.parse({ sourceId, stations: stations.slice(startStations), observations: observations.slice(startObservations), alerts: [] });
+    } catch {
+      stations.length = startStations;
+      observations.length = startObservations;
+      rejected++;
+    }
   }
-  return BatchSchema.parse({ sourceId, stations, observations, alerts: [] });
+  if (!stations.length) throw new Error("No usable observation records");
+  const uniqueStations = [...new Map(stations.map(s => [s.id, s])).values()];
+  const uniqueObservations = [...new Map(observations.map(o => [`${o.stationId}|${o.accumulationMinutes}`, o])).values()];
+  return BatchSchema.parse({ sourceId, stations: uniqueStations, observations: uniqueObservations, alerts: [], coverage: {
+    partial: rejected > 0, returned: outer.length - rejected, total: outer.length,
+    windowStart: fetchedAt, windowEnd: fetchedAt, timezoneAssumption: "Asia/Bangkok (+07:00)"
+  } });
 }
 
 export function parseTraffy(
@@ -245,7 +257,7 @@ export function parseTraffy(
     const p = f.properties,
       code = [...pilotProvinces].find(([, name]) => name === p.province)?.[0];
     if (
-      !code ||
+      code !== "10" ||
       p.type !== "น้ำท่วม" ||
       !p.district.trim() ||
       !p.subdistrict.trim()

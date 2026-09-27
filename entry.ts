@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+
 import { createHmac, randomUUID } from "node:crypto";
 import { capLinks, parseCapDocuments } from "./lib/cap";
 import { BatchSchema, type Batch } from "./lib/model";
@@ -104,6 +104,7 @@ async function pdfText(url: string): Promise<string> {
   });
 }
 async function ddpm() {
+  const { chromium } = await import("playwright");
   const browser = await chromium.launch({
     headless: true,
     executablePath: process.env.DOONAM_CHROMIUM,
@@ -328,8 +329,8 @@ for (const [id, collect] of [
   ["ddpm", ddpm],
 ] as const) {
   try {
-    if (id === "ddpm" && process.env.DOONAM_DDPM_ENABLED === "0") {
-      await send(id, undefined, "ACCESS");
+    if (id === "ddpm" && process.env.DOONAM_DDPM_ENABLED !== "1") {
+      console.log("ddpm disabled: no fetch, no ingest");
       continue;
     }
     const batch = await collect();

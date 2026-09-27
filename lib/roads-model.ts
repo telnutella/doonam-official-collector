@@ -129,7 +129,7 @@ export function roadAgeState(r: RoadReport, now: number) {
 }
 export function sourceDelayed(s: RoadHealth, now: number) {
   return (
-    !!s.error || !s.lastSuccess || now - Date.parse(s.lastSuccess) > 45 * 60000
+    !!s.error || !s.lastSuccess || now - Date.parse(s.lastSuccess) > 15 * 60000
   );
 }
 export function groupReports(rows: StoredRoadReport[]): RoadGroup[] {
@@ -203,4 +203,14 @@ export function safeFavoriteIds(value: unknown): string[] {
         ),
       ].slice(0, 20)
     : [];
+}
+
+export function normalizeRoadQuery(q: string) {
+  const original = normalizeText(q);
+  return (
+    original
+      .replace(/^(?:ถนน|ถ\.|ซอย|ซ\.|เขต|แขวง|อำเภอ|ตำบล|อ\.|ต\.)\s*/, "")
+      .replace(/([ก-๙A-Za-z])(\d)/g, "$1 $2")
+      .replace(/(\d)\s*แยก\s*/g, "$1 แยก ") || original
+  );
 }
