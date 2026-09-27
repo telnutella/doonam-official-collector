@@ -7,6 +7,18 @@ var __export = (target, all) => {
 // entry.ts
 import { createHmac, randomUUID } from "node:crypto";
 
+// lib/source-errors.ts
+function transportStage(error) {
+  const parts = [];
+  let current = error;
+  for (let i = 0; current && i < 5; i++) {
+    const e = current;
+    parts.push(String(e.code ?? ""), String(e.message ?? current));
+    current = e.cause;
+  }
+  return /CERT|TLS|SSL|LEAF_SIGNATURE/i.test(parts.join(" ")) ? "TLS" : "NETWORK";
+}
+
 // lib/cap.ts
 import { createHash } from "node:crypto";
 
@@ -8642,11 +8654,7 @@ async function read(url) {
       signal: AbortSignal.timeout(25e3)
     });
   } catch (e) {
-    throw new Error(
-      /CERT|TLS|SSL|LEAF_SIGNATURE/.test(
-        String(e.cause)
-      ) ? "TLS" : "NETWORK"
-    );
+    throw new Error(transportStage(e));
   }
   if (!r.ok) throw new Error("HTTP");
   const reader = r.body.getReader();

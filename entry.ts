@@ -1,5 +1,5 @@
-
 import { createHmac, randomUUID } from "node:crypto";
+import { transportStage } from "./lib/source-errors";
 import { capLinks, parseCapDocuments } from "./lib/cap";
 import { BatchSchema, type Batch } from "./lib/model";
 import {
@@ -20,13 +20,7 @@ async function read(url: string) {
       signal: AbortSignal.timeout(25000),
     });
   } catch (e) {
-    throw new Error(
-      /CERT|TLS|SSL|LEAF_SIGNATURE/.test(
-        String((e as Error & { cause?: unknown }).cause),
-      )
-        ? "TLS"
-        : "NETWORK",
-    );
+    throw new Error(transportStage(e));
   }
   if (!r.ok) throw new Error("HTTP");
   const reader = r.body!.getReader();
